@@ -176,7 +176,8 @@ app.post('/api/upload', upload.single('scan'), (req, res) => {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
-  const scanPath = req.file.path;
+  // Normalize path to use forward slashes for URLs
+  const scanPath = req.file.path.replace(/\\/g, '/');
 
   db.run(
     'INSERT INTO student_assessments (student_id, assessment_id, scan_path) VALUES (?, ?, ?)',

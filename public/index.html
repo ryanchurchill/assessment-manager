@@ -78,6 +78,14 @@
             background: #0056b3;
         }
 
+        button.secondary {
+            background: #6c757d;
+        }
+
+        button.secondary:hover {
+            background: #545b62;
+        }
+
         .success {
             background: #d4edda;
             color: #155724;
@@ -152,6 +160,114 @@
 
         .tab-content.active {
             display: block;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 90%;
+            max-height: 90%;
+            overflow: auto;
+            position: relative;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: #999;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            line-height: 1;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .scan-viewer {
+            text-align: center;
+        }
+
+        .scan-viewer img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .scan-viewer embed {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .assessment-list {
+            margin-top: 20px;
+        }
+
+        .assessment-card {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+
+        .assessment-card h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .assessment-card p {
+            margin: 5px 0;
+            color: #666;
+        }
+
+        .assessment-card button {
+            margin-top: 10px;
+        }
+
+        .no-data {
+            text-align: center;
+            color: #999;
+            padding: 40px;
+            font-style: italic;
         }
     </style>
 </head>
@@ -261,6 +377,32 @@
                     </div>
                     <button type="submit">Upload</button>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for viewing assessments -->
+    <div id="assessment-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Student Assessments</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="modal-body">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for viewing scans -->
+    <div id="scan-modal" class="modal">
+        <div class="modal-content" style="max-width: 1000px;">
+            <div class="modal-header">
+                <h2 id="scan-modal-title">Assessment Scan</h2>
+                <button class="close-btn" onclick="closeScanModal()">&times;</button>
+            </div>
+            <div id="scan-modal-body" class="scan-viewer">
+                <!-- Scan loaded dynamically -->
             </div>
         </div>
     </div>
@@ -421,26 +563,81 @@
             }
         }
 
-        // View student assessments
+        // View student assessments in modal
         async function viewStudentAssessments(studentId, studentName) {
             try {
                 const response = await fetch(`/api/students/${studentId}/assessments`);
                 const assessments = await response.json();
                 
+                const modal = document.getElementById('assessment-modal');
+                const modalTitle = document.getElementById('modal-title');
+                const modalBody = document.getElementById('modal-body');
+                
+                modalTitle.textContent = `Assessments for ${studentName}`;
+                
                 if (assessments.length === 0) {
-                    alert(`${studentName} has no assessments yet.`);
+                    modalBody.innerHTML = '<div class="no-data">No assessments yet for this student.</div>';
                 } else {
-                    let message = `Assessments for ${studentName}:\n\n`;
-                    assessments.forEach(a => {
-                        message += `${a.assessment_name}\n`;
-                        message += `Score: ${a.score || 'Not graded yet'}\n`;
-                        message += `Scan: ${a.scan_path}\n`;
-                        message += `Date: ${new Date(a.completed_at).toLocaleString()}\n\n`;
-                    });
-                    alert(message);
+                    modalBody.innerHTML = '<div class="assessment-list">' +
+                        assessments.map(a => `
+                            <div class="assessment-card">
+                                <h3>${a.assessment_name}</h3>
+                                <p><strong>Total Questions:</strong> ${a.total_questions}</p>
+                                <p><strong>Score:</strong> ${a.score || 'Not graded yet'}</p>
+                                <p><strong>Completed:</strong> ${new Date(a.completed_at).toLocaleString()}</p>
+                                <button onclick="viewScan('${a.scan_path}', '${a.assessment_name}')">View Scan</button>
+                            </div>
+                        `).join('') +
+                        '</div>';
                 }
+                
+                modal.classList.add('active');
             } catch (error) {
                 alert('Error loading assessments');
+            }
+        }
+
+        // View scan in modal
+        function viewScan(scanPath, assessmentName) {
+            const modal = document.getElementById('scan-modal');
+            const modalTitle = document.getElementById('scan-modal-title');
+            const modalBody = document.getElementById('scan-modal-body');
+            
+            modalTitle.textContent = assessmentName;
+            
+            // Determine file type and display accordingly
+            const fileExt = scanPath.split('.').pop().toLowerCase();
+            // Normalize path - replace backslashes with forward slashes for URLs
+            const normalizedPath = scanPath.replace(/\\/g, '/');
+            const scanUrl = '/' + normalizedPath;
+            
+            if (fileExt === 'pdf') {
+                modalBody.innerHTML = `<embed src="${scanUrl}" type="application/pdf" />`;
+            } else {
+                modalBody.innerHTML = `<img src="${scanUrl}" alt="Assessment scan" />`;
+            }
+            
+            modal.classList.add('active');
+        }
+
+        // Close modals
+        function closeModal() {
+            document.getElementById('assessment-modal').classList.remove('active');
+        }
+
+        function closeScanModal() {
+            document.getElementById('scan-modal').classList.remove('active');
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const assessmentModal = document.getElementById('assessment-modal');
+            const scanModal = document.getElementById('scan-modal');
+            if (event.target === assessmentModal) {
+                closeModal();
+            }
+            if (event.target === scanModal) {
+                closeScanModal();
             }
         }
 
